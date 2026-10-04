@@ -154,6 +154,7 @@ def compile_timeline(paragraphs: list[Paragraph], library: dict[str, Any]) -> di
     props = library.get("props", {})
     cfg = library.get("resolver", {"backend": "tfidf"})
     resolver = SentenceTransformerResolver(library.get("motions", []), cfg["model"]) if cfg.get("backend") == "sentence-transformer" else TfidfResolver(library.get("motions", []))
+    action_resolver = SentenceTransformerResolver(library.get("motions", []), cfg["action_model"]) if cfg.get("backend") == "sentence-transformer" and cfg.get("action_model") else resolver
     resolver_name = "sentence-transformer-cache-only" if cfg.get("backend") == "sentence-transformer" else "tfidf-baseline"
     events: list[Event] = []
     t = 0.0
@@ -181,7 +182,7 @@ def compile_timeline(paragraphs: list[Paragraph], library: dict[str, Any]) -> di
         elif p.kind == "action":
             parsed = extract_action(p.text, chars, props)
             actor = parsed["actor"] or current_actor
-            motion, score = resolver.match(p.text, "action")
+            motion, score = action_resolver.match(p.text, "action")
             prop = props.get(parsed["object"] or "")
             if prop:
                 events.append(Event(f"e{seq}", p.scene, t, 1.8, actor, "move", {"target": parsed["object"], "anchor": prop.get("anchor", [prop.get("x", 480), prop.get("y", 270)])})); seq += 1; t += 1.8

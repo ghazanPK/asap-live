@@ -11,6 +11,7 @@ license = {text = "MIT"}
 dependencies = []
 
 [project.optional-dependencies]
+speech = ["kokoro>=0.9.4", "soundfile>=0.12", "faster-whisper>=1.1"]
 semantic = ["sentence-transformers>=3.0"]
 
 [project.scripts]

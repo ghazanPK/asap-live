@@ -5,7 +5,7 @@ from pathlib import Path
 from asap_multi.core import compile_timeline, parse_screenplay, render_outputs
 
 ROOT = Path(__file__).parents[1]
-OUT = ROOT / "outputs" / "smoke"
+OUT = ROOT / "outputs" / "verify"
 library = json.loads((ROOT / "examples" / "library.json").read_text(encoding="utf-8"))
 timeline = compile_timeline(parse_screenplay(ROOT / "examples" / "screenplay.txt"), library)
 render_outputs(timeline, OUT)
