@@ -1,0 +1,17 @@
+title: "ASAP live demonstration"
+description: "A live demonstration of screenplay-driven virtual actors."
+markdown: kramdown
+kramdown:
+  input: GFM
+exclude:
+  - src
+  - tests
+  - .venv
+  - data
+  - runs
+  - outputs
+  - checkpoints
+  - pyproject.toml
+  - requirements.txt
+  - package.json
+  - package-lock.json

@@ -1,0 +1,10 @@
+SCENE: INT. LIVING ROOM - NIGHT
+ACTION: WOLF walks to the lamp and turns it off.
+CHARACTER: WOLF
+PARENTHETICAL: (angrily, trying to hide his fear)
+DIALOGUE: RED, you should not be here tonight.
+ACTION: RED sits on the left side of the sofa.
+CHARACTER: RED
+PARENTHETICAL: (sadly)
+DIALOGUE: I only came to bring this basket.
+

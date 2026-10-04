@@ -1,0 +1,18 @@
+{
+  "stage": {"width": 960, "height": 540, "background": "living-room"},
+  "characters": {
+    "WOLF": {"x": 180, "y": 360, "color": "#7657d6"},
+    "RED": {"x": 700, "y": 360, "color": "#d64d67"}
+  },
+  "props": {
+    "lamp": {"x": 760, "y": 270, "anchor": [735, 285], "interactions": ["turn off", "turn on"]},
+    "sofa": {"x": 480, "y": 370, "anchor": [420, 335], "interactions": ["sit"]}
+  },
+  "motions": [
+    {"id": "gesture_warning", "kind": "gesture", "phrases": ["should not", "warning", "danger"]},
+    {"id": "gesture_explain", "kind": "gesture", "phrases": ["came to bring", "explain", "offer"]},
+    {"id": "turn_off_lamp", "kind": "action", "phrases": ["turn off lamp", "switch lamp off"], "verb": "turn off", "object": "lamp"},
+    {"id": "sit_sofa_left", "kind": "action", "phrases": ["sit on left side of sofa", "sit sofa left"], "verb": "sit", "object": "sofa", "position": "left"}
+  ]
+}
+

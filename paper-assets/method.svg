@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="610" viewBox="0 0 1500 610" role="img" aria-labelledby="title desc">
+<title id="title">ASAP Real-Time Live!: screenplay-driven virtual-actor performance</title><desc id="desc">Scientific method schematic. Nodes and arrows describe data flow; dashed arrows identify training supervision.</desc>
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0 L9 4.5 L0 9 Z" fill="#34485b"/></marker></defs>
+<rect width="100%" height="100%" fill="white"/>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#182c3e}.label{font-size:23px;font-weight:600}.detail{font-size:18px}.section{font-size:20px;font-weight:700;fill:#365770}</style>
+<text x="36" y="44" font-size="27" font-weight="700">ASAP Real-Time Live!: screenplay-driven virtual-actor performance</text>
+<rect x="36" y="230" width="230" height="100" rx="6" fill="#edf5fb" stroke="#6c9bbb" stroke-width="2"/>
+<text class="label" x="151.0" y="274.0" text-anchor="middle">Screenplay</text>
+<text class="detail" x="151.0" y="300.0" text-anchor="middle">dialogue / action / actor</text>
+<rect x="320" y="230" width="240" height="100" rx="6" fill="#edf5fb" stroke="#6c9bbb" stroke-width="2"/>
+<text class="label" x="440.0" y="274.0" text-anchor="middle">Paragraph parsing</text>
+<text class="detail" x="440.0" y="300.0" text-anchor="middle">typed script structure</text>
+<rect x="625" y="100" width="295" height="85" rx="6" fill="#edf5fb" stroke="#6c9bbb" stroke-width="2"/>
+<text class="label" x="772.5" y="136.5" text-anchor="middle">Dialogue</text>
+<text class="detail" x="772.5" y="162.5" text-anchor="middle">speech + co-speech gesture</text>
+<rect x="625" y="250" width="295" height="85" rx="6" fill="#edf5fb" stroke="#6c9bbb" stroke-width="2"/>
+<text class="label" x="772.5" y="286.5" text-anchor="middle">Action</text>
+<text class="detail" x="772.5" y="312.5" text-anchor="middle">physical motion selection</text>
+<rect x="625" y="400" width="295" height="85" rx="6" fill="#edf5fb" stroke="#6c9bbb" stroke-width="2"/>
+<text class="label" x="772.5" y="436.5" text-anchor="middle">Parenthetical</text>
+<text class="detail" x="772.5" y="462.5" text-anchor="middle">emotion / facial expression</text>
+<rect x="990" y="230" width="245" height="100" rx="6" fill="#f3effa" stroke="#9681b6" stroke-width="2"/>
+<text class="label" x="1112.5" y="274.0" text-anchor="middle">Behavior composition</text>
+<text class="detail" x="1112.5" y="300.0" text-anchor="middle">timed actor performance</text>
+<rect x="1285" y="230" width="180" height="100" rx="6" fill="#eef7f1" stroke="#79a58a" stroke-width="2"/>
+<text class="label" x="1375.0" y="274.0" text-anchor="middle">Live scene</text>
+<text class="detail" x="1375.0" y="300.0" text-anchor="middle">virtual actors</text>
+<rect x="990" y="450" width="475" height="85" rx="6" fill="#f4f6f8" stroke="#929da6" stroke-width="2"/>
+<text class="label" x="1227.5" y="486.5" text-anchor="middle">Playback demonstration</text>
+<text class="detail" x="1227.5" y="512.5" text-anchor="middle">present script-driven scenes</text>
+<polyline points="266,280 320,280" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="560,280 590,280 590,142 625,142" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="920,142 955,142 955,280 990,280" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="560,280 590,280 590,292 625,292" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="920,292 955,292 955,280 990,280" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="560,280 590,280 590,442 625,442" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="920,442 955,442 955,280 990,280" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="1235,280 1285,280" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<polyline points="1375,330 1375,450" fill="none" stroke="#34485b" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text class="section" x="36" y="575">Scientific workflow redraw from the publication description; original rendering assets are not reproduced.</text>
+</svg>

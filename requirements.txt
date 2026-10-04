@@ -1,0 +1,3 @@
+# The offline TF-IDF baseline has no third-party runtime dependencies.
+# Optional semantic resolver: sentence-transformers>=3.0
+
