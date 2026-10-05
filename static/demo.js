@@ -1,8 +1,8 @@
 import * as THREE from './vendor/three.module.js';
-import {createStage} from './avatar.js?v=20261006-paper1';
-import {Speech} from './speech.js?v=20261006-paper1';
-import {MotionSequence} from './gesture-library.js?v=20261006-paper1';
-import {prepareApplicationMotion,gestureSummary} from './application-gesture.js?v=20261006-paper1';
+import {createStage} from './avatar.js?v=20261006-paper2';
+import {Speech} from './speech.js?v=20261006-paper2';
+import {MotionSequence} from './gesture-library.js?v=20261006-paper2';
+import {prepareApplicationMotion,gestureSummary} from './application-gesture.js?v=20261006-paper2';
 const $=id=>document.getElementById(id);let audioBus=null,stage=createStage($('stage')),speech=newSpeech();
 const variant=document.documentElement.dataset.variant||'journal';let timeline=null,actors={},props3d={},room=null,now=0,playing=false,last=0,spoken=new Set(),captures=[],format='txt',sceneGeneration=0,playbackGeneration=0,motionTrace=[],motionByEvent=new Map(),played=new Map();
 let cameraTrack=[],cameraMode='auto',recorder=null,recordedBlob=null,xrSession=null;
