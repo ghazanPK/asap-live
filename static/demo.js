@@ -1,5 +1,5 @@
-import {createStage} from './avatar.js';
-import {Speech} from './speech.js';
+import {createStage} from './avatar.js?v=20261005-gesture7';
+import {Speech} from './speech.js?v=20261005-gesture7';
 const $=id=>document.getElementById(id);let stage=createStage($('stage')),speech=new Speech(stage);
 const variant=document.documentElement.dataset.variant||'journal';let timeline=null,actors={},now=0,playing=false,last=0,spoken=new Set(),captures=[],format='txt';
 $('heading').textContent={journal:'ASAP: screenplay to storyboard and 3D previsualization',ismar:'ASAP: scene playback and storyboard capture',live:'ASAP: live screenplay playback'}[variant];
@@ -11,19 +11,19 @@ function build(data){timeline=data;now=0;playing=false;spoken.clear();speech.can
  for(const [name,p] of Object.entries(data.props))stage.addProp(name,coord(p.x,480),coord(p.y,350));
  $('scrub').max=data.duration;$('events').replaceChildren();for(const e of data.events){const li=document.createElement('li');li.textContent=`${e.start.toFixed(1)}s · ${e.actor||'SCENE'} · ${e.kind} · ${e.payload.motion||e.payload.emotion||e.payload.text||e.payload.heading||e.payload.target||''}`;$('events').append(li);}
  $('trace').textContent=JSON.stringify({paragraphs:data.paragraphs,resolved_events:data.events},null,2);for(const id of ['play','restart','capture','export','export-board'])$(id).disabled=false;
- if(variant==='live')playing=true;draw();
+ draw();
 }
 function draw(){if(!timeline)return;const active=timeline.events.filter(e=>e.start<=now&&now<e.start+e.duration);let caption='';
  for(const [name,a] of Object.entries(actors)){
   const initial=timeline.characters[name];a.root.position.x=coord(initial.x,480);a.root.position.z=coord(initial.y,350);
   for(const e of timeline.events.filter(e=>e.actor===name&&e.kind==='move'&&e.start<=now)){
    const k=Math.min(1,(now-e.start)/e.duration),target=e.payload.anchor;
-   const from=a.root.position.clone();a.root.position.x=from.x+(coord(target[0],480)-from.x)*k;a.root.position.z=from.z+(coord(target[1],350)-from.z)*k;
+   const from=a.root.position.clone();a.root.position.x=from.x+(coord(target[0],480)-1.2-from.x)*k;a.root.position.z=from.z+(coord(target[1],350)-from.z)*k;
   }
   const previous=timeline.events.filter(e=>e.actor===name&&e.kind==='emotion'&&e.start<=now).at(-1);stage.expression(previous?.payload.emotion||'neutral',previous?.payload.intensity||.5,a);
-  const g=active.find(e=>e.actor===name&&(e.kind==='gesture'||e.kind==='action'));const moving=active.some(e=>e.actor===name&&e.kind==='move');stage.gesture(g?.payload.motion||g?.payload.verb||(moving?'walk':'idle'),a);
-  const utterance=active.find(e=>e.actor===name&&e.kind==='speech');stage.setSpeech(Boolean(utterance&&playing),a);
-  if(utterance){caption=`${name}: ${utterance.payload.text}`;if(playing&&$('voice').checked&&!spoken.has(utterance.id)){spoken.add(utterance.id);speech.speak(utterance.payload.text,{backend:$('speech-backend').value}).catch(e=>$('status').textContent=e.message);}}
+  const g=active.find(e=>e.actor===name&&(e.kind==='gesture'||e.kind==='action'));const moving=active.some(e=>e.actor===name&&e.kind==='move');stage.gesture(g?.payload.motion||g?.payload.verb||(moving?'walk':'idle'),a,now);
+  const utterance=active.find(e=>e.actor===name&&e.kind==='speech');
+  if(utterance){caption=`${name}: ${utterance.payload.text}`;if(playing&&$('voice').checked&&!spoken.has(utterance.id)){spoken.add(utterance.id);speech.speak(utterance.payload.text,{backend:$('speech-backend').value,actor:a}).catch(e=>$('status').textContent=e.message);}}
  }
  $('caption').textContent=caption||active.find(e=>e.kind==='scene')?.payload.heading||'Scene continues…';$('clock').textContent=now.toFixed(1)+' s';$('scrub').value=now;
  [...$('events').children].forEach((li,i)=>li.classList.toggle('active',active.includes(timeline.events[i])));$('play').textContent=playing?'Pause':'Play';
@@ -32,7 +32,7 @@ function tick(t){if(playing&&timeline){now=Math.min(timeline.duration,now+(last?
 $('compile').onclick=async()=>{playing=false;speech.cancel();try{const library=JSON.parse($('library').value);if($('resolver').value==='semantic')library.resolver={backend:'sentence-transformer',model:$('gesture-model').value,action_model:$('action-model').value};else library.resolver={backend:'tfidf'};const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:$('script').value,format,library})});const data=await r.json();if(!r.ok)throw new Error(data.error);build(data);$('status').textContent=`Compiled ${data.events.length} events, ${data.duration.toFixed(1)} seconds.`;}catch(e){$('status').textContent=e.message;}};
 $('resolver').onchange=()=>$('model-options').hidden=$('resolver').value!=='semantic';
 $('script-file').onchange=async e=>{const file=e.target.files[0];if(file){$('script').value=await file.text();format=file.name.endsWith('.fdx')?'fdx':'txt';}};
-$('play').onclick=()=>{playing=!playing;if(!playing)speech.cancel();};$('restart').onclick=()=>{now=0;spoken.clear();speech.cancel();playing=true;};$('scrub').oninput=()=>{now=Number($('scrub').value);playing=false;speech.cancel();};
+$('play').onclick=()=>{if(now>=timeline.duration){now=0;spoken.clear();}playing=!playing;if(!playing)speech.cancel();};$('restart').onclick=()=>{now=0;spoken.clear();speech.cancel();playing=true;};$('scrub').oninput=()=>{now=Number($('scrub').value);playing=false;speech.cancel();};
 function download(name,body,type='application/json'){const url=URL.createObjectURL(new Blob([body],{type})),a=Object.assign(document.createElement('a'),{href:url,download:name});a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 $('export').onclick=()=>download('asap-timeline.json',JSON.stringify(timeline,null,2));
 $('capture').onclick=()=>{const image=stage.capture();captures.push({time:now,caption:$('caption').textContent,image});const card=document.createElement('article'),img=new Image(),p=document.createElement('p');img.src=image;img.alt=`Scene at ${now.toFixed(1)} seconds`;p.textContent=`${now.toFixed(1)} s — ${$('caption').textContent}`;card.append(img,p);$('storyboard').append(card);};
