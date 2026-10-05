@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.demo import compile_request
+from scripts.demo import compile_request, example
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,8 +15,9 @@ def test_text_request_compiles_script_to_grounded_timeline():
     result = compile_request({"script": script, "format": "txt", "library": LIBRARY})
     assert result["schema"] == "paperreach.asap.timeline.v1"
     assert result["duration"] > 0
-    assert {"scene", "move", "action", "speech", "gesture", "emotion"}.issubset({e["kind"] for e in result["events"]})
-    assert any(e["kind"] == "move" and e["payload"]["target"] == "lamp" for e in result["events"])
+    assert {"scene", "move", "action", "speech", "emotion"}.issubset({e["kind"] for e in result["events"]})
+    assert "gesture" not in {e["kind"] for e in result["events"]}
+    assert any(e["kind"] == "move" and e["payload"]["class"] == "lamp" for e in result["events"])
     assert any(e["kind"] == "speech" and e["payload"]["gaze"] == "RED" for e in result["events"])
 
 
@@ -30,7 +31,17 @@ def test_fdx_request_uses_paragraph_types_and_speaker():
     result = compile_request({"script": script, "format": "fdx", "library": LIBRARY})
     speech = next(e for e in result["events"] if e["kind"] == "speech")
     assert speech["actor"] == "WOLF" and speech["payload"]["text"] == "Hello RED."
-    assert any(e["kind"] == "move" and e["payload"]["target"] == "lamp" for e in result["events"])
+    assert any(e["kind"] == "move" and e["payload"]["class"] == "lamp" for e in result["events"])
+
+
+def test_bundled_examples_compile_and_unknown_names_fail():
+    for path in sorted((ROOT / "examples").glob("screenplay*.txt")):
+        name = path.stem.partition("-")[2]
+        bundled = example(name)
+        assert compile_request({"script": bundled["script"], "format": "txt", "library": bundled["library"]})["events"]
+    for name in ("../library", "missing"):
+        with pytest.raises(ValueError):
+            example(name)
 
 
 @pytest.mark.parametrize("payload", [

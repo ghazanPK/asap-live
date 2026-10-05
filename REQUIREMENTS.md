@@ -6,11 +6,11 @@ Only the Real-Time Live! abstract and public metadata were available locally. Th
 
 ## Public implementation requirements
 
-This project parses FDX or structured text, maps text to a user-authored motion library, creates speech/gaze/gesture, parenthetical-emotion, and actor/movement/object-interaction events, and renders continuous auto-playing SVG animation with an inspectable JSON schedule.
+This project parses FDX or structured text, matches action paragraphs to a user-authored plausible action–object–position dictionary, creates speech/gaze, parenthetical-emotion, and actor/movement/object-interaction events, and renders continuous auto-playing SVG animation with an inspectable JSON schedule. The browser demo starts playback after each compile. Dialogue carries a source language (`LANGUAGE:` lines in the screenplay, a character's `language`, or the library's `source_language`); it is passed to co-speech retrieval and to speech synthesis.
 
 ## Explicit assumptions and substitutions
 
-The parser, TF-IDF mapping, entity patterns, emotion dictionary, durations, prop anchors, SVG renderer, and timeline format are public-implementation assumptions. They are not claimed as details of the one-page live paper. This does not reproduce the original text-to-gesture model, its 2D-video/3D-mocap training data, Unity renderer, facial rig, TTS, or assets.
+The parser, stemmed TF-IDF and optional Sentence-BERT matching, subject and action rules, emotion dictionary and levels, durations, prop anchors, SVG renderer, and timeline format are public-implementation assumptions. They are not claimed as details of the one-page live paper. This does not reproduce the original text-to-gesture model, its 2D-video/3D-mocap training data, Unity renderer, facial rig, TTS, or assets.
 
 ## Interactive implementation
 
@@ -22,4 +22,4 @@ Two newly generated fictional CC0 humanoids replace the original avatar assets i
 
 ## Local recorded co-speech integration
 
-The browser application retrieves prepared BEAT body-motion clips with `automatic` mode: a current public-demo adapter; the one-page live paper does not identify this dependency. The first `python scripts/start_demo.py` run fetches a small official BVH/TextGrid sample, constructs a nine-clip bank, and fits the local retrieval artifact under ignored `outputs/beat-library/`. Install `scripts/requirements-demo.txt` first. Preparation code and method dependencies are vendored in this repository; no sibling clone, original institute library, full dataset, or pretrained weights are bundled. The screenplay parser, action resolver, live scene playback, and capture remain this application's core. The separate recorded-motion companion remains available for local motion/face/audio inspection.
+The browser application retrieves prepared BEAT body-motion clips with `multilingual` mode: the wild-pose matching model with multilingual support, which the live demonstration used according to the authors' project lineage. Each dialogue line sends its `source_language`. Non-English lines need an explicit English translation in `examples/beat-translations.json`; untranslated lines play without co-speech motion. The bundled Korean example (`examples/screenplay-ko.txt`) has a translation for every line. The first `python scripts/start_demo.py` run fetches a small official BVH/TextGrid sample, constructs a nine-clip bank, and fits the local retrieval artifact under ignored `outputs/beat-library/`. Install `scripts/requirements-demo.txt` first. Preparation code and method dependencies are vendored in this repository; no sibling clone, original institute library, full dataset, or pretrained weights are bundled. The screenplay parser, action resolver, live scene playback, and capture remain this application's core. The separate recorded-motion companion remains available for local motion/face/audio inspection.

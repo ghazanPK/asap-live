@@ -1,0 +1,14 @@
+# Korean dialogue for the multilingual co-speech gesture route. Scene, action and
+# parenthetical paragraphs stay in English because the plausible action dictionary
+# and the emotion keywords are English. Each Korean line has an explicit English
+# translation in examples/beat-translations.json.
+SCENE: INT. LIVING ROOM - NIGHT
+ACTION: WOLF walks to the lamp and turns it off.
+LANGUAGE: ko
+CHARACTER: WOLF
+PARENTHETICAL: (angrily, trying to hide his fear)
+DIALOGUE: 레드, 오늘 밤에는 여기 있으면 안 돼.
+ACTION: RED sits on the left side of the sofa.
+CHARACTER: RED
+PARENTHETICAL: (sadly)
+DIALOGUE: 바구니만 가져다주러 왔어요.

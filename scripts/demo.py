@@ -1,7 +1,8 @@
 """Local screenplay-to-3D demo. Run from an independently cloned ASAP repository."""
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler,ThreadingHTTPServer
-import argparse,json,sys,tempfile
+import argparse,json,re,sys,tempfile
+from urllib.parse import parse_qs,urlsplit
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'));sys.path.insert(0,str(ROOT/'scripts'))
 from asap_multi.core import compile_timeline,parse_screenplay
@@ -23,17 +24,27 @@ def compile_request(payload):
     if not paragraphs:raise ValueError('No supported screenplay paragraphs found.')
     return compile_timeline(paragraphs,library)
 
+def example(name=''):
+    """Bundled starter screenplay: examples/screenplay.txt or examples/screenplay-<name>.txt."""
+    if name and not re.fullmatch(r'[a-z]{2,12}',name):raise ValueError('Unknown example.')
+    file=ROOT/'examples'/(f'screenplay-{name}.txt' if name else 'screenplay.txt')
+    if not file.is_file():raise ValueError('Unknown example.')
+    return {'script':file.read_text(encoding='utf-8'),'library':json.loads((ROOT/'examples/library.json').read_text(encoding='utf-8'))}
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self,*args,**kwargs):super().__init__(*args,directory=str(ROOT/'static'),**kwargs)
     def json(self,result,status=200):
         body=json.dumps(result,ensure_ascii=False).encode();self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
     def do_GET(self):
-        if serve_beat(self,ROOT,'automatic'):return
-        if self.path=='/api/example':self.json({'script':(ROOT/'examples/screenplay.txt').read_text(encoding='utf-8'),'library':json.loads((ROOT/'examples/library.json').read_text(encoding='utf-8'))});return
+        if serve_beat(self,ROOT,'multilingual'):return
+        if urlsplit(self.path).path=='/api/example':
+            try:self.json(example(parse_qs(urlsplit(self.path).query).get('name',[''])[0]))
+            except ValueError as exc:self.json({'error':str(exc)},404)
+            return
         if self.path=='/api/speech':self.json(SPEECH.status());return
         super().do_GET()
     def do_POST(self):
-        if serve_beat(self,ROOT,'automatic'):return
+        if serve_beat(self,ROOT,'multilingual'):return
         if speech_route(self,SPEECH):return
         if self.path!='/api/compile':self.json({'error':'Unknown API route'},404);return
         try:
