@@ -40,7 +40,7 @@ Real-Time Live! demonstration; no journal benchmark is attributed to this item
 
 ## Explore the implementation
 
-A standalone autoplay previsualization demo. It uses disclosed shared-architecture choices from the journal and does not recreate the original live performance or Unity assets.
+A standalone autoplay previsualization demo whose co-speech gesture uses wild-pose matching with multilingual support, as in the authors' project lineage, with per-line source language. It uses disclosed shared-architecture choices from the journal and does not recreate the original live performance or Unity assets.
 
 This repository contains independently written research code. The institute's original source, datasets and trained models are not distributed. Public-data preparation, commands, assumptions and checks are documented below and in [REQUIREMENTS.md](REQUIREMENTS.md).
 
@@ -67,7 +67,7 @@ python -m pip install -r scripts/requirements-demo.txt
 python scripts/start_demo.py
 ```
 
-Open **http://127.0.0.1:8080/**. The starter screenplay loads into the live scene. Use **Play/Pause** and **Capture frame**. The launcher prepares pinned Three.js modules and downloads one small official BEAT BVH/TextGrid sample on first run. It builds a nine-clip local bank and fits the multilingual wild-pose matching adapter under ignored `outputs/beat-library/`; later runs reuse the cache. The first run needs internet access. Original recordings, large datasets, institute assets, and pretrained gesture weights are not distributed.
+Open **http://127.0.0.1:8080/**. The starter screenplay loads into the live scene and plays automatically. Use **Play / pause**; pick a **Camera** preset or the auto-cut camera track, **Record video** to save a WebM of the stage, and **Capture frame** to build the storyboard, which exports as HTML or JSON. The VR button offers an immersive view when the browser supports WebXR (not tested on headset hardware). Camera presets, recording and the VR view come from the later ASAP journal paper; the Real-Time Live! paper does not describe them, so they are web-demo extras here. The launcher prepares pinned Three.js modules and downloads one small official BEAT BVH/TextGrid sample on first run. It builds a nine-clip local bank and fits the multilingual wild-pose matching adapter under ignored `outputs/beat-library/`; later runs reuse the cache. The first run needs internet access. Original recordings, large datasets, institute assets, and pretrained gesture weights are not distributed.
 
 The 3D presentation uses shared Three.js avatar components and bundled fictional CC0 characters. The paper-specific algorithms and data adapters live in this repository.
 
