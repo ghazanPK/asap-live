@@ -127,8 +127,17 @@ function placeCamera(shot){const cam=stage.camera,a=actors[shot.subject];
  if(!a||shot.type==='wide'){cam.position.set(0,2.35,6.4);cam.lookAt(0,1,-.6);return;}
  const h=headPoint(a),forward=new THREE.Vector3(Math.sin(a.root.rotation.y),0,Math.cos(a.root.rotation.y));
  if(shot.type==='closeup'){cam.position.copy(h).addScaledVector(forward,1.05).add(new THREE.Vector3(0,.04,0));cam.lookAt(h.x,h.y-.05,h.z);return;}
- if(shot.type==='ots'&&actors[shot.listener]){const l=headPoint(actors[shot.listener]),dir=l.clone().sub(h).setY(0).normalize(),right=new THREE.Vector3(-dir.z,0,dir.x);
-  cam.position.copy(l).addScaledVector(dir,.75).addScaledVector(right,.5).add(new THREE.Vector3(0,.15,0));cam.lookAt(h.x,h.y-.08,h.z);return;}
+ if(shot.type==='ots'&&actors[shot.listener]){
+  // Over the shoulder: the camera sits just behind the listener's head, which frames one side of the shot, and
+  // the aim is swung so the speaker stays inside the other side for the current field of view and aspect ratio.
+  const l=headPoint(actors[shot.listener]),dir=l.clone().sub(h).setY(0).normalize(),right=new THREE.Vector3(-dir.z,0,dir.x);
+  const halfH=Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov)/2)*cam.aspect),side=.45,dist=Math.hypot(l.x-h.x,l.z-h.z);
+  const spread=b=>Math.atan2(side,b)-Math.atan2(side,b+dist);let back=1;while(back<3&&spread(back)>1.3*halfH)back+=.1;
+  // A seated speaker is seen from slightly higher, over the standing listener's shoulder.
+  cam.position.copy(l).addScaledVector(dir,back).addScaledVector(right,side);cam.position.y=l.y+.12+Math.max(0,l.y-h.y)*.5;
+  const yaw=Math.atan2(side,back)-.7*halfH,aim=dir.clone().negate().multiplyScalar(Math.cos(yaw)).addScaledVector(right,-Math.sin(yaw)),reach=back+dist;
+  const pitch=(Math.atan2(h.y-.05-cam.position.y,reach)+Math.atan2(l.y-.1-cam.position.y,back))/2;
+  cam.lookAt(cam.position.x+aim.x*reach,cam.position.y+Math.tan(pitch)*reach,cam.position.z+aim.z*reach);return;}
  // Medium: from the actor's facing side, swung toward the open front of the set so the action stays visible.
  const p=a.root.position,side=new THREE.Vector3(forward.x,0,Math.max(forward.z,0));if(side.length()<.5)side.set(forward.x>=0?.8:-.8,0,.6);side.normalize();
  cam.position.set(Math.max(-3.3,Math.min(3.3,p.x+side.x*2.7)),1.55,p.z+side.z*2.7+.4);cam.lookAt(p.x,1.0,p.z);}
@@ -254,7 +263,7 @@ function draw(){if(!timeline)return;const active=timeline.events.filter(e=>e.sta
  [...$('events').children].forEach((li,i)=>li.classList.toggle('active',active.includes(timeline.events[i])));$('play').textContent=playing?'Pause':'Play';
 }
 function tick(t){if(playing&&timeline){now=Math.min(timeline.duration,now+(last?(t-last)/1000:0));if(now>=timeline.duration){playing=false;playbackGeneration++;speech.cancel();if(recorder?.state==='recording')setTimeout(stopRecording,400);}}last=t;draw();requestAnimationFrame(tick);}requestAnimationFrame(tick);
-function seek(time){now=Math.max(0,Math.min(timeline?.duration||0,time));playing=false;playbackGeneration++;speech.cancel();}
+function seek(time){now=Math.max(0,Math.min(timeline?.duration||0,time));playing=false;playbackGeneration++;speech.cancel();draw();}
 async function compile(){playing=false;speech.cancel();try{const library=JSON.parse($('library').value),resolver=library.resolver||{};if($('resolver').value==='semantic')library.resolver={...resolver,backend:'sentence-transformer',emotion_model:$('emotion-model').value,action_model:$('action-model').value};else library.resolver={...resolver,backend:'tfidf'};const r=await fetch('/api/compile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script:$('script').value,format,library})});const data=await r.json();if(!r.ok)throw new Error(data.error);$('status').textContent=`Compiled ${data.events.length} events, ${data.duration.toFixed(1)} seconds.`;build(data);}catch(e){$('status').textContent=e.message;}}
 $('compile').onclick=compile;
 $('resolver').onchange=()=>$('model-options').hidden=$('resolver').value!=='semantic';
@@ -274,7 +283,8 @@ function renderStoryboard(){const board=$('storyboard');board.replaceChildren();
   text.rows=2;text.value=c.description;text.placeholder='Describe this frame (shot notes, blocking, mood)…';text.setAttribute('aria-label',`Description for the frame at ${c.time.toFixed(1)} seconds`);text.oninput=()=>{c.description=text.value;};
   remove.type='button';remove.className='small';remove.textContent='Remove';remove.onclick=()=>{captures.splice(i,1);renderStoryboard();};
   card.append(img,p,text,remove);board.append(card);});}
-$('capture').onclick=()=>{captures.push({time:now,caption:$('caption').textContent,shot:xrSession?'VR view':shotLabel(currentShot()),description:'',image:stage.capture()});renderStoryboard();};
+// Redraw first so the caption, camera and frame match the current time even if no animation frame ran since a seek.
+$('capture').onclick=()=>{draw();captures.push({time:now,caption:$('caption').textContent,shot:xrSession?'VR view':shotLabel(currentShot()),description:'',image:stage.capture()});renderStoryboard();};
 const boardFrames=()=>captures.map(c=>({time:+c.time.toFixed(3),caption:c.caption,description:c.description,camera:c.shot,image:c.image}));
 $('export-board').onclick=()=>download('asap-storyboard.html','<!doctype html><meta charset="utf-8"><title>ASAP captured storyboard</title><style>body{font:16px system-ui}img{width:420px;max-width:100%}article{display:inline-block;padding:15px;vertical-align:top;max-width:450px}.desc{white-space:pre-wrap}</style>'+captures.map(c=>`<article><img src="${c.image}" alt="Captured scene"><p>${c.time.toFixed(1)} s · ${escapeHtml(c.shot)} · ${escapeHtml(c.caption)}</p>${c.description?`<p class="desc">${escapeHtml(c.description)}</p>`:''}</article>`).join(''),'text/html');
 $('export-board-json').onclick=()=>download('asap-storyboard.json',JSON.stringify({schema:'paperreach.asap.storyboard.v1',variant,frames:boardFrames()},null,2));
