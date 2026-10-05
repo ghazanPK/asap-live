@@ -15,3 +15,7 @@ The parser, TF-IDF mapping, entity patterns, emotion dictionary, durations, prop
 ## Interactive implementation
 
 The local demo compiles the actual parser/resolver output into an original procedural Three.js stage. It supports text/FDX upload, editable character/prop/action catalogs, timeline scrubbing, dialogue playback, PNG storyboard capture and timeline/storyboard export. Recompilation resets the stage. The lexical example requires no weights; semantic mode uses independently configurable local gesture/action encoders. Model files, motion libraries and vendor downloads remain outside Git. The journal's GestureCLR pose-matching lineage is documented as a research dependency; this compact renderer uses authored poses rather than claiming recovered motion capture. Early ASAP variants expose a subset of this component implementation and do not claim the later journal evaluation. Optional Kokoro and faster-whisper adapters replace browser speech/typed input; mouth motion is an approximate envelope, not aligned visemes.
+
+## Bundled fictional avatar substitution
+
+Two newly generated fictional CC0 humanoids replace the original avatar assets in the browser demo. They provide a 53-bone rig and named ARKit/viseme targets. Motion retargeting adapts source joints to their bind pose; speaking envelopes approximate mouth motion rather than phoneme alignment. The optional recorded BEAT companion inspects public motion, face and audio files prepared locally, independently of the paper's learned algorithm. No dataset recordings or trained weights are bundled.
