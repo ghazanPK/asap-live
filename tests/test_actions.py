@@ -77,9 +77,60 @@ def test_sit_targets_seat_with_height_and_derived_anchor_without_offset(tmp_path
     action = next(e for e in data["events"] if e["kind"] == "action")
     assert move["payload"]["anchor"] == LIBRARY["props"]["sofa"]["anchors"]["left"]
     assert action["payload"]["seat_height"] == 0.45 and action["payload"]["face"] is None
-    assert move["duration"] == pytest.approx(max(0.6, math.dist(START["RED"], move["payload"]["anchor"]) / 140), abs=1e-3)
+    path = move["payload"]["path"]
+    assert path[0] == START["RED"] and path[-1] == LIBRARY["props"]["sofa"]["anchors"]["left"]
+    assert move["duration"] == pytest.approx(max(0.6, core.path_length(path) / 140), abs=1e-3)
     point = core.stand_point({"x": 400, "y": 300, "size": [1.0, 1.0, 1.0]}, "right")
     assert point == [400 + 70 + 49, 300 + 70 + 49]
+
+
+def _blocked_legs(path, props):
+    boxes = core.obstacle_boxes(props)
+    return [i for i, (a, b) in enumerate(zip(path, path[1:])) if any(core._segment_hits(a, b, box) for box in boxes)]
+
+
+def test_walk_path_goes_around_props_instead_of_through_them(tmp_path):
+    # RED's straight line to the left seat crosses the sofa; the planned path walks around it.
+    sofa = LIBRARY["props"]["sofa"]
+    assert core._segment_hits(START["RED"], sofa["anchors"]["left"], core.obstacle_boxes({"sofa": sofa})[0])
+    data = compile_text(tmp_path, "ACTION: RED opens the curtains.\nACTION: RED sits on the left side of the sofa.\n")
+    moves = [e["payload"] for e in data["events"] if e["kind"] == "move"]
+    assert [m["planner"] for m in moves] == ["grid-astar-octile"] * 2
+    to_window, to_seat = moves[0]["path"], moves[1]["path"]
+    assert _blocked_legs(to_window, LIBRARY["props"]) == []
+    # Only the final step into the seat may overlap the sofa footprint.
+    assert _blocked_legs(to_seat, LIBRARY["props"]) == [len(to_seat) - 2]
+    assert to_seat[-2][1] > sofa["y"] + sofa["size"][2] / 2 * 140  # entered from the front
+    assert core.path_length(to_seat) > math.dist(to_seat[0], to_seat[-1])
+
+
+def test_starter_scene_drives_prop_effects_and_path_following_previz(tmp_path):
+    data = compile_timeline(parse_screenplay(ROOT / "examples/screenplay.txt"), LIBRARY)
+    effects = [e["payload"]["effect"] for e in data["events"] if e["kind"] == "action" and "effect" in e["payload"]]
+    assert effects == [{"prop": "lamp_2", "state": "off"}, {"prop": "window", "state": "open"}, {"prop": "tv", "state": "on"}]
+    assert all(e["payload"]["path"][0] == e["payload"]["from"] for e in data["events"] if e["kind"] == "move")
+    core.render_outputs(data, tmp_path)
+    pages = [p for p in tmp_path.glob("*.html") if p.name != "storyboard.html"]  # previz, immersive or live page
+    assert pages and all("mv.payload.path" in p.read_text(encoding="utf-8") for p in pages)
+
+
+def test_astar_open_floor_is_straight_and_no_corner_cutting():
+    assert core.plan_path([100, 100], [400, 300], {}) == ([[100.0, 100.0], [400.0, 300.0]], "grid-astar-octile")
+    # Two boxes touching at a corner leave only a diagonal grid gap between two
+    # blocked orthogonal cells; the planner must walk around instead of squeezing through.
+    props = {"a": {"x": 300, "y": 200, "size": [1.0, 0.65, 1.0]}, "b": {"x": 440, "y": 340, "size": [1.0, 0.65, 1.0]}}
+    start, goal = [300.0, 330.0], [440.0, 200.0]
+    boxes = core.obstacle_boxes(props, 0.0)
+    assert any(core._segment_hits(start, goal, box) for box in boxes)
+    path, planner = core.plan_path(start, goal, props, radius=0.0)
+    assert planner == "grid-astar-octile" and path[0] == start and path[-1] == goal
+    assert not any(core._segment_hits(a, b, box) for a, b in zip(path, path[1:]) for box in boxes)
+    assert core.path_length(path) > 2 * math.dist(start, goal)
+    # A walled-in goal has no path: the move falls back to a straight line and says so.
+    cage = {f"w{i}": {"x": x, "y": y, "size": [s, 1, t]} for i, (x, y, s, t) in enumerate(
+        [(480, 200, 3, .2), (480, 400, 3, .2), (300, 300, .2, 3), (660, 300, .2, 3)])}
+    assert core.plan_path([60, 60], [480, 300], cage) == ([[60.0, 60.0], [480.0, 300.0]], "straight-fallback")
+
 
 
 def test_actions_dictionary_is_the_single_source_of_truth():

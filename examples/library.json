@@ -1,18 +1,24 @@
 {
   "stage": {"width": 960, "height": 540, "background": "living-room"},
   "characters": {
-    "WOLF": {"x": 180, "y": 360, "color": "#7657d6"},
-    "RED": {"x": 700, "y": 360, "color": "#d64d67"}
+    "WOLF": {"x": 180, "y": 360, "color": "#7657d6", "avatar": "rowan"},
+    "RED": {"x": 700, "y": 360, "color": "#d64d67", "avatar": "mira"}
   },
   "props": {
-    "lamp": {"class": "lamp", "x": 760, "y": 250, "size": [0.35, 1.3, 0.35], "anchor": [700, 290], "interaction": [760, 250, 1.15], "color": "#e0b572"},
-    "lamp_2": {"class": "lamp", "x": 250, "y": 250, "size": [0.35, 1.3, 0.35], "anchor": [305, 290], "interaction": [250, 250, 1.15], "color": "#e0b572"},
+    "lamp": {"class": "lamp", "x": 760, "y": 250, "size": [0.35, 1.3, 0.35], "anchor": [700, 290], "interaction": [760, 250, 1.15], "color": "#e0b572", "state": "on"},
+    "lamp_2": {"class": "lamp", "x": 250, "y": 250, "size": [0.35, 1.3, 0.35], "anchor": [305, 290], "interaction": [250, 250, 1.15], "color": "#e0b572", "state": "on"},
     "sofa": {"class": "sofa", "x": 480, "y": 380, "size": [1.6, 0.45, 0.75], "seat_height": 0.45, "color": "#8a6a5c",
-             "anchors": {"left": [427, 392], "center": [480, 392], "right": [533, 392]}}
+             "anchors": {"left": [427, 392], "center": [480, 392], "right": [533, 392]}},
+    "tv": {"class": "tv", "x": 480, "y": 95, "size": [1.2, 1.15, 0.4], "interaction": [440, 126, 1.0], "color": "#2b2f3a", "state": "off"},
+    "window": {"class": "window", "x": 770, "y": 12, "size": [1.3, 1.5, 0.12], "interaction": [725, 22, 1.35], "color": "#9c6b62", "state": "closed"}
   },
   "actions": [
     {"id": "turn_on_lamp", "verb": "turn on", "object": "lamp", "position": null, "phrases": ["turn on the lamp", "switch the lamp on"], "effect": {"state": "on"}},
     {"id": "turn_off_lamp", "verb": "turn off", "object": "lamp", "position": null, "phrases": ["turn off the lamp", "switch the lamp off"], "effect": {"state": "off"}},
+    {"id": "turn_on_tv", "verb": "turn on", "object": "tv", "position": null, "phrases": ["turn on the TV", "switch the television on"], "effect": {"state": "on"}},
+    {"id": "turn_off_tv", "verb": "turn off", "object": "tv", "position": null, "phrases": ["turn off the TV", "switch the television off"], "effect": {"state": "off"}},
+    {"id": "open_window", "verb": "open", "object": "window", "position": null, "phrases": ["open the curtains", "open the window"], "effect": {"state": "open"}},
+    {"id": "close_window", "verb": "close", "object": "window", "position": null, "phrases": ["close the curtains", "close the window"], "effect": {"state": "closed"}},
     {"id": "walk_to_lamp", "verb": "walk", "object": "lamp", "position": null, "phrases": ["walk to the lamp"]},
     {"id": "walk_to_sofa", "verb": "walk", "object": "sofa", "position": null, "phrases": ["walk to the sofa"]},
     {"id": "sit_sofa", "verb": "sit", "object": "sofa", "position": null, "phrases": ["sit on the sofa"]},

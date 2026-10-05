@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import heapq
 import html
 import json
 import math
@@ -14,6 +15,8 @@ STAGE_SCALE = 140.0  # stage pixels per metre, shared with the browser stage
 WALK_SPEED = 1.0  # metres per second for approach paths
 CLEARANCE = 0.35  # metres between a prop's bounding box and a derived stand point
 DEFAULT_PROP_SIZE = (0.55, 0.65, 0.55)  # width, height, depth in metres
+GRID_STEP = 0.1  # metres per walking-grid cell
+ACTOR_RADIUS = 0.2  # metres of body clearance kept from prop footprints while walking
 
 # Ekman's seven categories. Each keyword records the intensity level it implies
 # (1 weak, 2 medium, 3 strong); libraries may replace this dictionary.
@@ -437,6 +440,141 @@ def _distance(a: list[float], b: list[float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+# --------------------------------------------------------------------------
+# Obstacle-aware walking: grid A* over the stage floor. Props are axis-aligned
+# footprints inflated by the actor's body radius; moves are 8-connected with an
+# octile heuristic and diagonals only when both orthogonal neighbours are free
+# (no corner cutting). The cell path is shortened by line-of-sight checks
+# against the exact inflated footprints.
+def obstacle_boxes(props: dict[str, Any], radius: float = ACTOR_RADIUS) -> list[tuple[float, float, float, float]]:
+    """Inflated prop footprints in stage pixels: (x0, y0, x1, y1)."""
+    boxes = []
+    for prop in props.values():
+        if prop.get("walkable"):
+            continue
+        w, _, d = _size(prop)
+        x, y = float(prop.get("x", 480)), float(prop.get("y", 350))
+        hw, hd = (w / 2 + radius) * STAGE_SCALE, (d / 2 + radius) * STAGE_SCALE
+        boxes.append((x - hw, y - hd, x + hw, y + hd))
+    return boxes
+
+
+def _inside(point: list[float], box: tuple[float, float, float, float]) -> bool:
+    return box[0] < point[0] < box[2] and box[1] < point[1] < box[3]
+
+
+def _segment_hits(a: list[float], b: list[float], box: tuple[float, float, float, float]) -> bool:
+    """Liang-Barsky clip: does the open segment a-b pass through the box interior?"""
+    t0, t1 = 0.0, 1.0
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for p, q in ((-dx, a[0] - box[0]), (dx, box[2] - a[0]), (-dy, a[1] - box[1]), (dy, box[3] - a[1])):
+        if abs(p) < 1e-12:
+            if q <= 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 >= t1 - 1e-9:
+            return False
+    return True
+
+
+def _clear(a: list[float], b: list[float], boxes: list[tuple[float, float, float, float]]) -> bool:
+    return not any(_segment_hits(a, b, box) for box in boxes)
+
+
+def plan_path(start: list[float], goal: list[float], props: dict[str, Any], stage: dict[str, Any] | None = None,
+              step: float = GRID_STEP, radius: float = ACTOR_RADIUS) -> tuple[list[list[float]], str]:
+    """Shortest obstacle-free walking path in stage pixels and the planner that produced it.
+
+    A start or goal inside an inflated footprint (a seat, or an actor leaving one)
+    connects to its nearest free cell, so only that short entry/exit leg overlaps the prop.
+    """
+    stage = stage or {}
+    boxes = obstacle_boxes(props, radius)
+    start, goal = [float(start[0]), float(start[1])], [float(goal[0]), float(goal[1])]
+    if _clear(start, goal, boxes) and not any(_inside(start, b) or _inside(goal, b) for b in boxes):
+        return [start, goal], "grid-astar-octile"
+    cell = step * STAGE_SCALE
+    width, height = float(stage.get("width", 960)), float(stage.get("height", 540))
+    cols, rows = max(2, int(math.ceil(width / cell))), max(2, int(math.ceil(height / cell)))
+    center = lambda c, r: [(c + 0.5) * cell, (r + 0.5) * cell]  # noqa: E731
+    blocked = [[any(_inside(center(c, r), b) for b in boxes) for c in range(cols)] for r in range(rows)]
+
+    def to_cell(p: list[float]) -> tuple[int, int]:
+        return min(cols - 1, max(0, int(p[0] // cell))), min(rows - 1, max(0, int(p[1] // cell)))
+
+    def nearest_free(p: list[float]) -> tuple[int, int] | None:
+        c0, r0 = to_cell(p)
+        if not blocked[r0][c0]:
+            return c0, r0
+        free = [(c, r) for r in range(rows) for c in range(cols) if not blocked[r][c]]
+        return min(free, key=lambda cr: _distance(center(*cr), p)) if free else None
+
+    a, b = nearest_free(start), nearest_free(goal)
+    if a is None or b is None:
+        return [start, goal], "straight-fallback"
+    diagonal = math.sqrt(2.0)
+
+    def octile(c: int, r: int) -> float:
+        dx, dy = abs(c - b[0]), abs(r - b[1])
+        return (dx + dy) + (diagonal - 2) * min(dx, dy)
+
+    best = {a: 0.0}
+    parent: dict[tuple[int, int], tuple[int, int]] = {}
+    frontier = [(octile(*a), 0.0, a)]
+    closed: set[tuple[int, int]] = set()
+    while frontier:
+        _, cost, node = heapq.heappop(frontier)
+        if node in closed:
+            continue
+        if node == b:
+            break
+        closed.add(node)
+        c, r = node
+        for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            nc, nr = c + dc, r + dr
+            if not (0 <= nc < cols and 0 <= nr < rows) or blocked[nr][nc]:
+                continue
+            if dc and dr and (blocked[r][nc] or blocked[nr][c]):
+                continue  # no corner cutting
+            new = cost + (diagonal if dc and dr else 1.0)
+            if new < best.get((nc, nr), math.inf):
+                best[(nc, nr)] = new
+                parent[(nc, nr)] = node
+                heapq.heappush(frontier, (new + octile(nc, nr), new, (nc, nr)))
+    if b not in best:
+        return [start, goal], "straight-fallback"
+    cells = [b]
+    while cells[-1] != a:
+        cells.append(parent[cells[-1]])
+    points = [center(*cr) for cr in reversed(cells)]
+    # An endpoint in its own free cell replaces that cell centre; an enclosed or
+    # snapped endpoint keeps the forced entry/exit leg to its nearest free cell.
+    if to_cell(start) == a and len(points) > 1:
+        points[0] = start
+    else:
+        points.insert(0, start)
+    if to_cell(goal) == b and len(points) > 1 and points[-1] != start:
+        points[-1] = goal
+    else:
+        points.append(goal)
+    path = [points[0]]
+    i = 0
+    while i < len(points) - 1:
+        j = next((k for k in range(len(points) - 1, i + 1, -1) if _clear(points[i], points[k], boxes)), i + 1)
+        path.append(points[j])
+        i = j
+    return [[round(v, 2) for v in p] for p in path], "grid-astar-octile"
+
+
+def path_length(path: list[list[float]]) -> float:
+    return sum(_distance(p, q) for p, q in zip(path, path[1:]))
+
+
 class ActionResolver:
     def __init__(self, library: dict[str, Any], cfg: dict[str, Any]):
         self.combos = action_dictionary(library)
@@ -609,12 +747,14 @@ def compile_timeline(paragraphs: list[Paragraph], library: dict[str, Any]) -> di
                 anchor = stand_point(prop, position)
                 center = [float(prop.get("x", 480)), float(prop.get("y", 350))]
                 start = positions.get(actor, anchor)
-                distance = _distance(start, anchor) / STAGE_SCALE
                 face = None if combo["verb"] == "sit" else center
-                if distance > 0.05:
+                if _distance(start, anchor) / STAGE_SCALE > 0.05:
+                    path, planner = plan_path(start, anchor, props, library.get("stage"))
+                    distance = path_length(path) / STAGE_SCALE
                     walk = max(0.6, distance / WALK_SPEED)
                     add(p.scene, t, walk, actor, "move", {"target": name, "class": combo["object"], "from": [round(v, 2) for v in start],
-                                                          "anchor": [round(v, 2) for v in anchor], "face": face, "distance_m": round(distance, 3)})
+                                                          "anchor": [round(v, 2) for v in anchor], "face": face, "distance_m": round(distance, 3),
+                                                          "path": path, "planner": planner})
                     t += walk
                 positions[actor] = anchor
                 height = _size(prop)[1]
@@ -637,8 +777,8 @@ def _page(title: str, body: str, data: dict[str, Any], autoplay: bool = False, i
     return f"""<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>{html.escape(title)}</title>
 <style>body{{margin:0;background:#111827;color:#eef2ff;font:15px system-ui}}header{{padding:18px 24px}}#wrap{{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,1fr);gap:16px;padding:0 24px 24px}}svg{{width:100%;height:auto;background:#243047;border-radius:16px}}aside{{background:#182033;padding:16px;border-radius:16px;max-height:540px;overflow:auto}}button,input{{accent-color:#f59e0b}}.active{{color:#fbbf24}}@media(max-width:780px){{#wrap{{grid-template-columns:1fr}}}} .immersive svg{{border-radius:50%/18%}} </style></head>
 <body class='{mode}'><header><h1>{html.escape(title)}</h1><button id='play'>Play / pause</button> <input id='scrub' type='range' min='0' max='{data['duration']}' value='0' step='.05'> <span id='clock'>0.0s</span></header><div id='wrap'><svg id='stage' viewBox='0 0 960 540' aria-label='schematic previz stage'></svg><aside><h2>Timeline</h2><ol id='events'></ol></aside></div><script>const D={packed};let now=0,playing={str(autoplay).lower()},last=0;const S=document.querySelector('#stage'),L=document.querySelector('#events'),R=document.querySelector('#scrub');
-function esc(s){{return String(s).replace(/[&<>\"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}}[c]))}};
-function draw(){{let e=D.events.filter(x=>x.start<=now&&now<x.start+x.duration);let bg=`<rect width='960' height='540' fill='#27354f'/><path d='M0 410 L960 410' stroke='#94a3b8'/><text x='24' y='40' fill='white'>${{esc(D.stage.background||'user stage')}}</text>`;for(const [n,p] of Object.entries(D.props))bg+=`<rect x='${{p.x-35}}' y='${{p.y-25}}' width='70' height='50' rx='8' fill='#64748b'/><text x='${{p.x}}' y='${{p.y+5}}' text-anchor='middle' fill='white'>${{esc(n)}}</text>`;for(const [n,c] of Object.entries(D.characters)){{let mv=[...D.events].reverse().find(x=>x.actor===n&&x.kind==='move'&&x.start<=now),k=mv?Math.min(1,(now-mv.start)/Math.max(.001,mv.duration)):1,x=mv?mv.payload.from[0]+(mv.payload.anchor[0]-mv.payload.from[0])*k:c.x,y=mv?mv.payload.from[1]+(mv.payload.anchor[1]-mv.payload.from[1])*k:c.y;let a=e.find(x=>x.actor===n);bg+=`<circle cx='${{x}}' cy='${{y-65}}' r='24' fill='${{c.color||'#38bdf8'}}'/><path d='M${{x}} ${{y-40}}v70m-28-45h56m-56 75l28-30 28 30' stroke='${{c.color||'#38bdf8'}}' stroke-width='12' fill='none'/><text x='${{x}}' y='${{y+48}}' text-anchor='middle' fill='white'>${{esc(n)}}</text>${{a?`<text x='${{x}}' y='${{y-105}}' text-anchor='middle' fill='#fbbf24'>${{esc(a.kind)}}</text>`:''}}`}}S.innerHTML=bg;document.querySelector('#clock').textContent=now.toFixed(1)+'s';R.value=now;[...L.children].forEach((li,i)=>li.className=(D.events[i].start<=now&&now<D.events[i].start+D.events[i].duration)?'active':'')}}
+function along(P,k){{let L=0;for(let i=1;i<P.length;i++)L+=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);let d=k*L;for(let i=1;i<P.length;i++){{const s=Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]);if(d<=s||i===P.length-1){{const f=s?Math.min(1,d/s):1;return [P[i-1][0]+(P[i][0]-P[i-1][0])*f,P[i-1][1]+(P[i][1]-P[i-1][1])*f]}}d-=s}}return P[P.length-1]}};function esc(s){{return String(s).replace(/[&<>\"]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}}[c]))}};
+function draw(){{let e=D.events.filter(x=>x.start<=now&&now<x.start+x.duration);let bg=`<rect width='960' height='540' fill='#27354f'/><path d='M0 410 L960 410' stroke='#94a3b8'/><text x='24' y='40' fill='white'>${{esc(D.stage.background||'user stage')}}</text>`;for(const [n,p] of Object.entries(D.props))bg+=`<rect x='${{p.x-35}}' y='${{p.y-25}}' width='70' height='50' rx='8' fill='#64748b'/><text x='${{p.x}}' y='${{p.y+5}}' text-anchor='middle' fill='white'>${{esc(n)}}</text>`;for(const [n,c] of Object.entries(D.characters)){{let mv=[...D.events].reverse().find(x=>x.actor===n&&x.kind==='move'&&x.start<=now),k=mv?Math.min(1,(now-mv.start)/Math.max(.001,mv.duration)):1,[x,y]=mv?along(mv.payload.path||[mv.payload.from,mv.payload.anchor],k):[c.x,c.y];let a=e.find(x=>x.actor===n);bg+=`<circle cx='${{x}}' cy='${{y-65}}' r='24' fill='${{c.color||'#38bdf8'}}'/><path d='M${{x}} ${{y-40}}v70m-28-45h56m-56 75l28-30 28 30' stroke='${{c.color||'#38bdf8'}}' stroke-width='12' fill='none'/><text x='${{x}}' y='${{y+48}}' text-anchor='middle' fill='white'>${{esc(n)}}</text>${{a?`<text x='${{x}}' y='${{y-105}}' text-anchor='middle' fill='#fbbf24'>${{esc(a.kind)}}</text>`:''}}`}}S.innerHTML=bg;document.querySelector('#clock').textContent=now.toFixed(1)+'s';R.value=now;[...L.children].forEach((li,i)=>li.className=(D.events[i].start<=now&&now<D.events[i].start+D.events[i].duration)?'active':'')}}
 D.events.forEach(x=>{{let li=document.createElement('li');li.textContent=`${{x.start.toFixed(1)}}s · ${{x.actor||'SCENE'}} · ${{x.kind}}`;L.appendChild(li)}});function tick(ts){{if(playing){{if(last)now+=(ts-last)/1000;if(now>D.duration)now=0}}last=ts;draw();requestAnimationFrame(tick)}}document.querySelector('#play').onclick=()=>playing=!playing;R.oninput=()=>{{now=+R.value;draw()}};requestAnimationFrame(tick);</script></body></html>"""
 
 
