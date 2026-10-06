@@ -45,6 +45,8 @@ function buildRoom(data){
  for(const side of [0,1]){const w=new THREE.Mesh(new THREE.PlaneGeometry(depth,height),wall);w.rotation.y=side?-Math.PI/2:Math.PI/2;w.position.set(x0+side*width,height/2,z0+depth/2);group.add(w);}
  const boards=new THREE.Mesh(new THREE.PlaneGeometry(width,depth),floor);boards.rotation.x=-Math.PI/2;boards.position.set(x0+width/2,.003,z0+depth/2);group.add(boards);
  box(group,[width,.12,.03],[x0+width/2,.06,z0+.015],material('#2a2433'));
+ // The camera stays inside the side and back walls (the front of the set is open).
+ roomBounds={minX:x0+.13,maxX:x0+width-.13,minZ:z0+.15,front:z0+depth};
  stage.scene.add(group);return group;
 }
 function buildProp(name,p){
@@ -122,25 +124,116 @@ function currentShot(){if(cameraMode==='auto')return cameraTrack.find(s=>s.start
  if(type==='ots'){const listener=Object.keys(actors).find(n=>n!==subject);return listener?{type,subject,listener}:{type:'closeup',subject};}
  return {type,subject};}
 function headPoint(a){const head=a.rig?.bones.get('head');if(head&&a.rig.model.visible!==false)return head.getWorldPosition(new THREE.Vector3());return a.root.position.clone().add(new THREE.Vector3(0,1.62,0));}
-function placeCamera(shot){const cam=stage.camera,a=actors[shot.subject];
- if(shot.type==='free'){const angle=Number($('camera-angle').value)/100;cam.position.set(6*Math.sin(angle),1.8,6*Math.cos(angle));cam.lookAt(0,1,0);return;}
- if(!a||shot.type==='wide'){cam.position.set(0,2.35,6.4);cam.lookAt(0,1,-.6);return;}
+const rotY=(v,angle)=>v.clone().applyAxisAngle(new THREE.Vector3(0,1,0),angle);
+// Camera pose for a shot. A variant (yaw orbit around the subject, height, distance; shoulder side for OTS) moves the
+// camera away from the preset when something blocks the view; the empty variant reproduces the preset exactly.
+function shotPose(shot,v={}){const cam=stage.camera,a=actors[shot.subject],yaw=v.yaw||0,k=v.k??1,dh=v.dh||0;
+ if(!a||shot.type==='wide'){const pivot=new THREE.Vector3(0,1,-.6),o=rotY(new THREE.Vector3(0,0,7),yaw).multiplyScalar(k);return {pos:pivot.clone().add(o).setY(2.35+dh),target:pivot};}
  const h=headPoint(a),forward=new THREE.Vector3(Math.sin(a.root.rotation.y),0,Math.cos(a.root.rotation.y));
- if(shot.type==='closeup'){cam.position.copy(h).addScaledVector(forward,1.05).add(new THREE.Vector3(0,.04,0));cam.lookAt(h.x,h.y-.05,h.z);return;}
+ if(shot.type==='closeup'||v.kind==='orbit')return {pos:h.clone().add(rotY(forward,yaw).multiplyScalar(1.05*k)).add(new THREE.Vector3(0,.04+dh,0)),target:new THREE.Vector3(h.x,h.y-.05,h.z)};
  if(shot.type==='ots'&&actors[shot.listener]){
   // Over the shoulder: the camera sits just behind the listener's head, which frames one side of the shot, and
   // the aim is swung so the speaker stays inside the other side for the current field of view and aspect ratio.
-  const l=headPoint(actors[shot.listener]),dir=l.clone().sub(h).setY(0).normalize(),right=new THREE.Vector3(-dir.z,0,dir.x);
+  const l=headPoint(actors[shot.listener]),dir=l.clone().sub(h).setY(0).normalize(),right=new THREE.Vector3(-dir.z,0,dir.x).multiplyScalar(v.side??1);
   const halfH=Math.atan(Math.tan(THREE.MathUtils.degToRad(cam.fov)/2)*cam.aspect),side=.45,dist=Math.hypot(l.x-h.x,l.z-h.z);
-  const spread=b=>Math.atan2(side,b)-Math.atan2(side,b+dist);let back=1;while(back<3&&spread(back)>1.3*halfH)back+=.1;
+  const spread=b=>Math.atan2(side,b)-Math.atan2(side,b+dist);let back=1;while(back<3&&spread(back)>1.3*halfH)back+=.1;back*=v.kb??1;
   // A seated speaker is seen from slightly higher, over the standing listener's shoulder.
-  cam.position.copy(l).addScaledVector(dir,back).addScaledVector(right,side);cam.position.y=l.y+.12+Math.max(0,l.y-h.y)*.5;
-  const yaw=Math.atan2(side,back)-.7*halfH,aim=dir.clone().negate().multiplyScalar(Math.cos(yaw)).addScaledVector(right,-Math.sin(yaw)),reach=back+dist;
-  const pitch=(Math.atan2(h.y-.05-cam.position.y,reach)+Math.atan2(l.y-.1-cam.position.y,back))/2;
-  cam.lookAt(cam.position.x+aim.x*reach,cam.position.y+Math.tan(pitch)*reach,cam.position.z+aim.z*reach);return;}
+  const pos=l.clone().addScaledVector(dir,back).addScaledVector(right,side);pos.y=l.y+.12+Math.max(0,l.y-h.y)*.5+dh;
+  const turn=Math.atan2(side,back)-.7*halfH,aim=dir.clone().negate().multiplyScalar(Math.cos(turn)).addScaledVector(right,-Math.sin(turn)),reach=back+dist;
+  const pitch=(Math.atan2(h.y-.05-pos.y,reach)+Math.atan2(l.y-.1-pos.y,back))/2;
+  return {pos,target:new THREE.Vector3(pos.x+aim.x*reach,pos.y+Math.tan(pitch)*reach,pos.z+aim.z*reach)};}
  // Medium: from the actor's facing side, swung toward the open front of the set so the action stays visible.
  const p=a.root.position,side=new THREE.Vector3(forward.x,0,Math.max(forward.z,0));if(side.length()<.5)side.set(forward.x>=0?.8:-.8,0,.6);side.normalize();
- cam.position.set(Math.max(-3.3,Math.min(3.3,p.x+side.x*2.7)),1.55,p.z+side.z*2.7+.4);cam.lookAt(p.x,1.0,p.z);}
+ const o=rotY(new THREE.Vector3(side.x*2.7,0,side.z*2.7+.4),yaw).multiplyScalar(k);
+ return {pos:new THREE.Vector3(Math.max(-3.3,Math.min(3.3,p.x+o.x)),1.55+dh,p.z+o.z),target:new THREE.Vector3(p.x,1.0,p.z)};}
+
+// ---------------------------------------------------------------------------
+// Occlusion avoidance. Rays from the camera to the subject's face (centre and both sides) and chest are cast against
+// the props and the other actors (proxy capsules); the OTS foreground listener is excluded by design. When the view is
+// blocked, alternative poses orbiting the subject are tried, nearest to the preset first. The chosen pose is held while
+// it stays clear (re-searched when blocked or when the shot changes) and the preset returns only after it has been
+// clear for a while, so the camera cuts rather than jitters. Fading a blocking prop is the last resort.
+const DEG=Math.PI/180,YAWS=[0,15,-15,30,-30,45,-45,60,-60,75,-75,90,-90].map(d=>d*DEG);
+function variants(list){return list.map(v=>({...v,cost:Math.abs(v.yaw||0)/(15*DEG)+Math.abs(v.dh||0)/.25*1.2+Math.abs(1-(v.k??1))/.2+(v.side===-1?1.5:0)+(Math.abs(1-(v.kb??1))/.15)+(v.kind==='orbit'?20:0)})).sort((a,b)=>a.cost-b.cost);}
+const grid=(yaws,dhs,ks,extra={})=>yaws.flatMap(yaw=>dhs.flatMap(dh=>ks.map(k=>({yaw,dh,k,...extra}))));
+const CANDIDATES={
+ closeup:variants(grid(YAWS,[0,.15,.3,-.12],[1,.8,.65,1.25])),
+ medium:variants(grid(YAWS,[0,.3,.6,-.2],[1,.8,.6,1.2])),
+ wide:variants(grid([0,10,-10,20,-20,30,-30,45,-45].map(d=>d*DEG),[0,.4,.8],[1,.85,.7])),
+ ots:variants([...[1,-1].flatMap(side=>[0,.15,.3].flatMap(dh=>[1,.85,1.2].map(kb=>({side,dh,kb,kind:'ots'})))),...grid(YAWS,[0,.15,.3,-.12],[1,.8,.65,1.25],{kind:'orbit'})])};
+const raycaster=new THREE.Raycaster(),proxyMaterial=new THREE.MeshBasicMaterial({side:THREE.DoubleSide}),proxies=new WeakMap();
+let cameraAvoid=true,cameraHold=null,roomBounds=null;
+function actorProxy(a){let p=proxies.get(a);
+ if(!p){p={body:new THREE.Mesh(new THREE.CylinderGeometry(1,1,1,12),proxyMaterial),head:new THREE.Mesh(new THREE.SphereGeometry(1,14,10),proxyMaterial)};p.body.userData.camActor=p.head.userData.camActor=a;proxies.set(a,p);}
+ const h=headPoint(a),hips=a.rig?.bones.get('hips')?.getWorldPosition(new THREE.Vector3())||a.root.position.clone().setY(.95),top=h.clone().setY(h.y-.08),bottom=hips.clone().setY(Math.max(.35,hips.y-.15));
+ const axis=top.clone().sub(bottom),len=Math.max(.1,axis.length());
+ p.body.position.copy(bottom).addScaledVector(axis,.5);p.body.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),axis.normalize());p.body.scale.set(.17,len,.17);p.body.updateMatrixWorld(true);
+ p.head.position.copy(h).add(new THREE.Vector3(0,.08,0));p.head.scale.setScalar(.12);p.head.updateMatrixWorld(true);return {...p,headPoint:h};}
+function sightScene(){const meshes=[],boxes=[];
+ for(const [name,p] of Object.entries(props3d)){p.group.updateMatrixWorld(true);p.group.traverse(o=>{if(o.isMesh&&o.visible){o.userData.camProp=name;meshes.push(o);}});boxes.push(new THREE.Box3().setFromObject(p.group).expandByScalar(.1));}
+ const actorProxies=new Map(Object.values(actors).map(a=>[a,actorProxy(a)]));return {meshes,boxes,actorProxies};}
+// Who must be seen: the subject (minus itself and, for OTS framing, the listener) or, in a wide shot, every actor past the props.
+function sightPlan(shot,v={}){const a=actors[shot.subject];
+ if(a&&shot.type!=='wide'){const exclude=new Set([a]);if(shot.type==='ots'&&v.kind!=='orbit'&&actors[shot.listener])exclude.add(actors[shot.listener]);return [{actor:a,exclude}];}
+ return Object.values(actors).map(actor=>({actor,exclude:null}));}
+function poseAllowed(pose,ctx,plan){const p=pose.pos,b=roomBounds;
+ if(p.y<.35||p.y>3.3)return false;
+ if(b&&(p.z<b.minZ||(p.z<b.front&&(p.x<b.minX||p.x>b.maxX))))return false;
+ if(ctx.boxes.some(box=>box.containsPoint(p)))return false;
+ for(const [a,proxy] of ctx.actorProxies)if(Math.hypot(p.x-proxy.headPoint.x,p.z-proxy.headPoint.z)<.32&&p.y<proxy.headPoint.y+.25)return false;
+ return true;}
+// Rays from the camera to the face centre, both sides of the face, the top of the head and the chest; returns the blocking objects.
+function sightHits(pos,ctx,plan,lateral=.07){const hits=[],up=new THREE.Vector3(0,1,0);
+ for(const {actor,exclude} of plan){const proxy=ctx.actorProxies.get(actor),h=proxy?proxy.headPoint:headPoint(actor);
+  const objects=[...ctx.meshes];if(exclude)for(const [a,p] of ctx.actorProxies)if(!exclude.has(a))objects.push(p.body,p.head);
+  const face=h.clone().add(new THREE.Vector3(0,.08,0)),side=face.clone().sub(pos).cross(up).setY(0);if(side.lengthSq()<1e-6)side.set(1,0,0);side.normalize().multiplyScalar(lateral);
+  for(const target of [face,face.clone().add(side),face.clone().sub(side),h.clone().add(new THREE.Vector3(0,.17,0)),h.clone().add(new THREE.Vector3(0,-.27,0))]){
+   const dir=target.clone().sub(pos),d=dir.length();if(d<.05)continue;raycaster.set(pos,dir.divideScalar(d));raycaster.near=.03;raycaster.far=d-.04;
+   const hit=raycaster.intersectObjects(objects,false)[0];if(hit)hits.push(hit.object);}}
+ return hits;}
+const clearPose=(shot,v,ctx,strict)=>{const pose=shotPose(shot,v),plan=sightPlan(shot,v);if(!poseAllowed(pose,ctx,plan))return null;return sightHits(pose.pos,ctx,plan,strict?.12:.07).length?null:pose;};
+function applyFade(names){for(const [name,p] of Object.entries(props3d)){const on=names.has(name);if(!!p.faded===on)continue;p.faded=on;
+ p.group.traverse(o=>{if(!o.isMesh)return;for(const m of [o.material].flat()){if(on){m.userData.fadeBase??={transparent:m.transparent,opacity:m.opacity,depthWrite:m.depthWrite};Object.assign(m,{transparent:true,opacity:.22,depthWrite:false});}
+  else if(m.userData.fadeBase){Object.assign(m,m.userData.fadeBase);delete m.userData.fadeBase;}m.needsUpdate=true;}});}}
+function frameShot(shot){const list=CANDIDATES[shot.type==='ots'&&!actors[shot.listener]?'medium':actors[shot.subject]?shot.type:'wide']||CANDIDATES.wide,preset=list[0];
+ if(!cameraAvoid||!Object.keys(actors).length)return {pose:shotPose(shot,preset),variant:preset,fade:new Set()};
+ const ctx=sightScene(),key=[cameraMode,shot.type,shot.subject||'',shot.listener||'',shot.start??''].join('|');
+ const hold=cameraHold&&cameraHold.key===key&&now>=cameraHold.time-.01&&now-cameraHold.time<.6?cameraHold:null;
+ let variant=null,pose=null,clearSince=null,anchor=null;
+ if(hold){
+  // A medium-shot fallback stays put and pans with the moving subject instead of re-framing every step.
+  if(hold.anchor){const p={pos:hold.anchor.clone(),target:shotPose(shot,preset).target},plan=sightPlan(shot,hold.variant),d=p.pos.distanceTo(p.target);
+   if(d>1.2&&d<5.5&&poseAllowed(p,ctx,plan)&&!sightHits(p.pos,ctx,plan).length){pose=p;anchor=hold.anchor;}}
+  else pose=clearPose(shot,hold.variant,ctx,false);
+  if(pose){variant=hold.variant;
+   // Back to the preset only after it has stayed clear (with margin) for two seconds of scene time.
+   if(variant!==preset&&clearPose(shot,preset,ctx,true)){clearSince=hold.clearSince??now;if(now-clearSince>=2){variant=preset;pose=shotPose(shot,preset);clearSince=null;anchor=null;}}}}
+ let fade=new Set();
+ // Fresh shots search outward from the preset; a blocked held pose prefers the clear pose nearest the current camera.
+ const order=hold?list.map(v=>({v,c:v.cost+shotPose(shot,v).pos.distanceTo(stage.camera.position)*1.5})).sort((a,b)=>a.c-b.c).map(o=>o.v):list;
+ if(!variant){for(const v of order){pose=clearPose(shot,v,ctx,true);if(pose){variant=v;break;}}}
+ if(!variant){for(const v of order){pose=clearPose(shot,v,ctx,false);if(pose){variant=v;break;}}}
+ if(variant&&variant!==preset&&!anchor&&shot.type==='medium'&&actors[shot.subject])anchor=pose.pos.clone();
+ if(!variant){// Last resort: the allowed pose nearest the preset with the fewest blocked rays, fading the props in the way.
+  let best=null;for(const v of list){const p=shotPose(shot,v),plan=sightPlan(shot,v);if(!poseAllowed(p,ctx,plan))continue;const hits=sightHits(p.pos,ctx,plan),actorHits=hits.filter(o=>o.userData.camActor).length;
+   if(!best||actorHits<best.actorHits||(actorHits===best.actorHits&&hits.length<best.hits.length))best={v,p,hits,actorHits};if(!hits.length)break;}
+  variant=best?.v||preset;pose=best?.p||shotPose(shot,preset);for(const o of best?.hits||[])if(o.userData.camProp)fade.add(o.userData.camProp);}
+ cameraHold={key,variant,time:now,clearSince,anchor};return {pose,variant,fade};}
+function placeCamera(shot){const cam=stage.camera;
+ if(shot.type==='free'){applyFade(new Set());const angle=Number($('camera-angle').value)/100;cam.position.set(6*Math.sin(angle),1.8,6*Math.cos(angle));cam.lookAt(0,1,0);return;}
+ const framed=frameShot(shot);applyFade(framed.fade);cam.position.copy(framed.pose.pos);cam.lookAt(framed.pose.target);}
+// Debug helpers: toggle avoidance for comparison, and scrub every camera-track segment every `step` seconds,
+// counting samples whose subject is hidden (expect 0 blocked with avoidance on); `mode` checks a manual preset instead.
+window.asapCameraAvoid=(on=true)=>{cameraAvoid=!!on;cameraHold=null;draw();return cameraAvoid;};
+window.asapCameraCheck=async({step=.25,avoid=true,mode='auto'}={})=>{if(!timeline)return null;const saved={avoid:cameraAvoid,mode:cameraMode,now};
+ cameraAvoid=avoid;cameraMode=mode;cameraHold=null;playing=false;playbackGeneration++;speech.cancel();const frame=()=>new Promise(r=>requestAnimationFrame(()=>r()));const segments=[];
+ try{for(const [index,s] of cameraTrack.entries()){const seg={index,shot:shotLabel(s),start:s.start,end:s.end,samples:0,blocked:0,faded:0,blockedAt:[]};
+  for(let t=s.start;t<s.end-1e-6;t+=step){now=t;draw();await frame();draw();const shot=currentShot();if(shot.type==='free')continue;
+   const hold=cameraHold?.variant||{},hits=sightHits(stage.camera.position.clone(),sightScene(),sightPlan(shot,hold)),solid=hits.filter(o=>!(o.userData.camProp&&props3d[o.userData.camProp]?.faded));
+   seg.samples++;if(solid.length){seg.blocked++;seg.blockedAt.push(+t.toFixed(2));}else if(hits.length)seg.faded++;}
+  segments.push(seg);}}
+ finally{cameraAvoid=saved.avoid;cameraMode=saved.mode;cameraHold=null;now=saved.now;draw();}
+ return {avoid,mode,step,samples:segments.reduce((n,s)=>n+s.samples,0),blocked:segments.reduce((n,s)=>n+s.blocked,0),faded:segments.reduce((n,s)=>n+s.faded,0),segments};};
 function renderCameraOptions(){const select=$('camera-mode'),keep=cameraMode;select.replaceChildren(new Option('Auto-cut (camera track)','auto'),new Option('Wide','wide'),new Option('Free orbit (angle slider)','free'));
  for(const name of Object.keys(actors))for(const type of ['closeup','ots','medium'])select.append(new Option(shotLabel(currentShotFor(type,name)),`${type}:${name}`));
  cameraMode=[...select.options].some(o=>o.value===keep)?keep:'auto';select.value=cameraMode;}
@@ -154,7 +247,7 @@ function renderCameraTrack(){const strip=$('camera-track');strip.replaceChildren
 // ---------------------------------------------------------------------------
 function build(data){sceneGeneration++;playbackGeneration++;timeline=data;now=0;playing=false;spoken.clear();speech.cancel();captures=[];motionTrace=[];motionByEvent=new Map();played=new Map();$('storyboard').replaceChildren();
  if(recorder?.state==='recording')stopRecording();xrSession?.end().catch(()=>{});
- stage.dispose();stage=createStage($('stage'));speech=newSpeech();actors={};props3d={};stage.avatar.root.visible=false;
+ stage.dispose();stage=createStage($('stage'));speech=newSpeech();actors={};props3d={};cameraHold=null;stage.avatar.root.visible=false;
  room=buildRoom(data);
  for(const [name,c] of Object.entries(data.characters)){const cast=c.avatar&&(/^[a-z0-9_-]+$/i.test(c.avatar)?new URL(`./avatars/${c.avatar}.glb`,location.href).href:/\.glb$/i.test(c.avatar)?c.avatar:undefined);
   actors[name]=cast?stage.makeAvatar(c.color||'#60c8d9',coord(c.x,480),coord(c.y,350),cast):stage.makeAvatar(c.color||'#60c8d9',coord(c.x,480),coord(c.y,350));}
@@ -254,7 +347,7 @@ function draw(){if(!timeline)return;const active=timeline.events.filter(e=>e.sta
   }else if(a.motionActive&&!a.speaking)stage.clearMotion(a);
  }
  const t=performance.now()/1000;for(const [name,p] of Object.entries(props3d))p.apply(propLevel(name,p.kind),t);
- const shot=currentShot();if(!xrSession)placeCamera(shot);
+ const shot=currentShot();if(!xrSession)placeCamera(shot);else applyFade(new Set());
  $('shot-label').textContent=(recorder?.state==='recording'?'● REC · ':'')+(xrSession?'VR view':shotLabel(shot));
  const head=$('camera-playhead');if(head)head.style.left=`${now/timeline.duration*100}%`;
  const activeShot=cameraMode==='auto'?String(cameraTrack.indexOf(shot)):'';for(const seg of $('camera-track').querySelectorAll('.shot'))seg.classList.toggle('active',seg.dataset.index===activeShot);
