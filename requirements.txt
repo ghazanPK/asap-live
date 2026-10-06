@@ -1,3 +1,4 @@
 # The offline TF-IDF baseline has no third-party runtime dependencies.
-# Optional semantic resolver: sentence-transformers>=3.0
+# Optional semantic resolver: sentence-transformers>=3.0 (also listed in scripts/requirements-demo.txt for the BEAT demo;
+# scripts/start_demo.py downloads models/all-MiniLM-L6-v2, which semantic mode uses when no model folder is named)
 

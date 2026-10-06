@@ -224,3 +224,41 @@ def test_sentence_bert_models_are_loaded_once_across_compiles(tmp_path, monkeypa
     assert sorted(loads) == ["local/action", "local/emotion"]
     assert data["resolvers"] == {"action": "sentence-transformer-cache-only", "emotion": "sbert-keywords"}
     assert next(e for e in data["events"] if e["kind"] == "emotion")["payload"]["method"] == "sbert-keywords"
+
+
+def test_semantic_mode_defaults_to_the_downloaded_minilm(tmp_path, monkeypatch):
+    """Owner decision 2026-10-06: with no model folder named, actions and emotions use models/all-MiniLM-L6-v2."""
+    loads = []
+
+    class FakeModel:
+        def __init__(self, name, local_files_only=False):
+            assert local_files_only is True
+            loads.append(name)
+
+        def encode(self, texts, normalize_embeddings=True):
+            out = []
+            for text in texts:
+                vec = [0.0] * 64
+                for stem in core._stems(text):
+                    vec[sum(map(ord, stem)) % 64] += 1.0
+                norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+                out.append([v / norm for v in vec])
+            return out
+
+    for name in core.SBERT_ENV:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(core, "REPO_ROOT", tmp_path)
+    assert core.resolve_sentence_model(None) is None  # nothing downloaded yet: lexical matching
+    (tmp_path / "models" / core.SBERT_NAME).mkdir(parents=True)
+    minilm = str(tmp_path / "models" / core.SBERT_NAME)
+    assert core.resolve_sentence_model("") == core.resolve_sentence_model("auto") == minilm
+    monkeypatch.setenv("SBERT_MODEL", "/elsewhere/model")
+    assert core.resolve_sentence_model(None) == "/elsewhere/model" and core.resolve_sentence_model("local/x") == "local/x"
+    monkeypatch.delenv("SBERT_MODEL")
+    monkeypatch.setitem(sys.modules, "sentence_transformers", types.SimpleNamespace(SentenceTransformer=FakeModel))
+    monkeypatch.setattr(core, "_MODEL_CACHE", {})
+    monkeypatch.setattr(core, "_EMBED_CACHE", {})
+    library = {**LIBRARY, "resolver": {"backend": "sentence-transformer"}}
+    data = compile_text(tmp_path, (ROOT / "examples/screenplay.txt").read_text(encoding="utf-8"), library)
+    assert loads == [minilm]
+    assert data["resolvers"] == {"action": "sentence-transformer-cache-only", "emotion": "sbert-keywords"}

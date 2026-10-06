@@ -4,6 +4,7 @@ import heapq
 import html
 import json
 import math
+import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
@@ -180,9 +181,37 @@ _MODEL_CACHE: dict[str, Any] = {}
 _EMBED_CACHE: dict[tuple[str, str], list[float]] = {}
 
 
+SBERT_NAME = "all-MiniLM-L6-v2"
+SBERT_ENV = ("BEAT_SBERT_MODEL", "SBERT_MODEL")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_sentence_model(name: str | None = None) -> str | None:
+    """Sentence-BERT model for semantic mode.
+
+    A configured folder or model name wins; a relative folder is looked up in the
+    working directory, then the repository root. Without one (empty, ``auto`` or
+    ``default``): ``BEAT_SBERT_MODEL``, ``SBERT_MODEL``, then the repository's
+    ``models/all-MiniLM-L6-v2``, which ``scripts/start_demo.py`` downloads on
+    first run. None means no model is available (lexical matching is used).
+    """
+    value = str(name).strip() if name else ""
+    if value and value.lower() not in {"auto", "default"}:
+        path = Path(value)
+        if not path.is_absolute() and not path.exists() and (REPO_ROOT / path).exists():
+            return str(REPO_ROOT / path)
+        return value
+    for variable in SBERT_ENV:
+        if os.environ.get(variable):
+            return os.environ[variable]
+    local = REPO_ROOT / "models" / SBERT_NAME
+    return str(local) if local.is_dir() else None
+
+
 def _sentence_model(name: str) -> Any:
     if not name:
-        raise RuntimeError("Semantic mode needs a local Sentence-BERT model directory")
+        raise RuntimeError("Semantic mode needs a local Sentence-BERT model: run python scripts/beat_demo/fetch_models.py "
+                           "(start_demo.py does this on first run) or name a model folder")
     if name not in _MODEL_CACHE:
         try:
             from sentence_transformers import SentenceTransformer
@@ -580,9 +609,10 @@ class ActionResolver:
         self.combos = action_dictionary(library)
         self.props = library.get("props", {})
         self.characters = library.get("characters", {})
-        self.semantic = _semantic(cfg) and bool(cfg.get("action_model"))
+        model = resolve_sentence_model(cfg.get("action_model")) if _semantic(cfg) else None
+        self.semantic = bool(model)
         phrases = [p for c in self.combos for p in c["phrases"]]
-        self.encoder = SentenceEncoder(cfg["action_model"]) if self.semantic else LexicalEncoder(phrases)
+        self.encoder = SentenceEncoder(model) if self.semantic else LexicalEncoder(phrases)
         self.threshold = float(cfg.get("action_threshold", 0.45 if self.semantic else 0.3))
         self.paraphrase = float(cfg.get("action_paraphrase_threshold", 0.7)) if self.semantic else math.inf
         self.lexicon = _verb_lexicon(self.combos, library.get("verb_synonyms"))
@@ -682,7 +712,7 @@ def compile_timeline(paragraphs: list[Paragraph], library: dict[str, Any]) -> di
     props = library.get("props", {})
     cfg = library.get("resolver") or {"backend": "tfidf"}
     semantic = _semantic(cfg)
-    emotion_model = (cfg.get("emotion_model") or cfg.get("model")) if semantic else None
+    emotion_model = resolve_sentence_model(cfg.get("emotion_model") or cfg.get("model")) if semantic else None
     actions = ActionResolver(library, cfg)
     overrides = _overrides(library)
     positions = {n: [float(c.get("x", 480)), float(c.get("y", 350))] for n, c in chars.items()}

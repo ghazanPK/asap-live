@@ -128,14 +128,14 @@ These modules follow the later journal architecture; the one-page live paper doe
 
 ### Local Sentence-BERT models
 
-Semantic mode never downloads at compile time. Models load with `local_files_only=True`, once per server process, and embeddings are cached across compiles. The journal paper names `all-mpnet-base-v2` for gesture text and `multi-qa-mpnet-base-dot-v1` for actions; this implementation reuses `all-mpnet-base-v2` for the emotion keywords, because co-speech retrieval runs in the BEAT adapter. Save both models into the ignored `models/` folder once:
+Semantic mode never downloads at compile time. Models load with `local_files_only=True`, once per server process, and embeddings are cached across compiles. **Default model.** With no model folder named (blank fields in the demo, or no `emotion_model`/`action_model` in the library), both the action and the emotion resolver use all-MiniLM-L6-v2. `python scripts/start_demo.py` downloads it once (about 92 MB) into ignored `models/all-MiniLM-L6-v2`, which the shared BEAT gesture retrieval also uses. The lookup order is `BEAT_SBERT_MODEL`, then `SBERT_MODEL`, then `models/all-MiniLM-L6-v2`; `--offline` skips the download. The 0.45 and 0.7 action thresholds were set for the larger models; with MiniLM the bundled screenplay resolves the same actions and emotions as the lexical baseline. **Paper models (optional).** The paper names `all-mpnet-base-v2` for gesture text and `multi-qa-mpnet-base-dot-v1` for actions; this implementation can reuse `all-mpnet-base-v2` for the emotion keywords, because co-speech retrieval runs in the BEAT adapter. They are about 420 MB each and are never downloaded automatically. Save both into the ignored `models/` folder once:
 
 ```sh
 python -m pip install -e ".[semantic]"
 python -c "from sentence_transformers import SentenceTransformer as S; [S('sentence-transformers/' + n).save('models/' + n) for n in ('all-mpnet-base-v2', 'multi-qa-mpnet-base-dot-v1')]"
 ```
 
-In the demo, choose **Sentence-BERT** and enter `models/all-mpnet-base-v2` and `models/multi-qa-mpnet-base-dot-v1`. For the CLI, add the same folders to the library; relative paths resolve from the working directory:
+In the demo, choose **Sentence-BERT** and leave the fields blank for MiniLM, or enter `models/all-mpnet-base-v2` and `models/multi-qa-mpnet-base-dot-v1`. For the CLI, add the same folders to the library, or `"backend": "sentence-transformer"` alone for MiniLM. Relative paths resolve from the working directory, then the repository root:
 
 ```json
 "resolver": {"backend": "sentence-transformer", "emotion_model": "models/all-mpnet-base-v2", "action_model": "models/multi-qa-mpnet-base-dot-v1"}
